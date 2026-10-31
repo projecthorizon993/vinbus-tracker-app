@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity, Text } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { MaterialCommunityIcons } from 'react-native-vector-icons';
-import { COLORS, REGIONS } from '../constants';
+import { COLORS, REGIONS, CONGESTION_COLORS } from '../constants';
 
 const { width, height } = Dimensions.get('window');
 
 export default function BusMap({ buses, region, trafficData, onBusSelect }) {
   const mapRef = useRef(null);
   const [selectedBus, setSelectedBus] = useState(null);
+  const [hanoiCameras, setHanoiCameras] = useState([]);
 
   const regionCoords = REGIONS.find(r => r.code === region) || REGIONS[0];
 
@@ -51,6 +52,24 @@ export default function BusMap({ buses, region, trafficData, onBusSelect }) {
     );
   };
 
+  const renderHanoiCamera = (cam) => {
+    return (
+      <Marker
+        key={cam.camera_id}
+        coordinate={{
+          latitude: cam.lat,
+          longitude: cam.lng,
+        }}
+        title={cam.name}
+        onPress={() => setSelectedBus(null)}
+      >
+        <View style={styles.cameraMarker}>
+          <MaterialCommunityIcons name="cctv" size={20} color="#DC2626" />
+        </View>
+      </Marker>
+    );
+  };
+
   const getSpeedColor = (speed) => {
     if (speed < 10) return COLORS.tertiary;
     if (speed < 30) return COLORS.warning;
@@ -58,6 +77,17 @@ export default function BusMap({ buses, region, trafficData, onBusSelect }) {
   };
 
   const trafficPolylines = trafficData?.traffic_polyline || [];
+
+  useEffect(() => {
+    if (region === 'hn') {
+      fetch('https://cds.hanoi.gov.vn/api/1.0/public/video-wall-cameras-v2?page=1&refresh=0', {
+        headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' },
+      })
+        .then((r) => r.json())
+        .then((data) => setHanoiCameras(data.data || []))
+        .catch(() => {});
+    }
+  }, [region]);
 
   return (
     <View style={styles.container}>
@@ -86,6 +116,8 @@ export default function BusMap({ buses, region, trafficData, onBusSelect }) {
         ))}
 
         {buses.map(renderMarker)}
+
+        {region === 'hn' && hanoiCameras.map(renderHanoiCamera)}
 
         {selectedBus && (
           <Marker coordinate={{
@@ -153,6 +185,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     paddingHorizontal: 4,
     borderRadius: 4,
+  },
+  cameraMarker: {
+    backgroundColor: '#DC2626',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.white,
   },
   calloutContainer: {
     backgroundColor: COLORS.white,
@@ -229,6 +271,23 @@ function Row({ label, value }) {
   );
 }
 
+const rowStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  rowLabel: {
+    fontSize: 14,
+    color: COLORS.gray,
+  },
+  rowValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.dark,
+  },
+});
+
 function decodePolyline(encoded) {
   if (!encoded) return [];
   let index = 0, len = encoded.length;
@@ -256,20 +315,3 @@ function decodePolyline(encoded) {
   }
   return coordinates;
 }
-
-const rowStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  rowLabel: {
-    fontSize: 14,
-    color: COLORS.gray,
-  },
-  rowValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.dark,
-  },
-});
